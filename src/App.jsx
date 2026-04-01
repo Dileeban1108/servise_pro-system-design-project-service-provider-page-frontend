@@ -4,13 +4,13 @@ import axios from 'axios';
 import './index.css';
 import './App.css';
 
-import Layout             from './components/service_provider/layout/Layout';
-import ProviderDashboard  from './components/service_provider/dashboard/ProviderDashboard';
-import AddService         from './components/service_provider/services/AddService';
-import EditService        from './components/service_provider/services/EditService';
-import ManageServices     from './components/service_provider/services/ManageServices';
-import Appointments       from './components/service_provider/appointments/Appointments';
-import ProviderAnalytics  from './components/service_provider/analytics/ProviderAnalytics';
+import Layout             from './layout/Layout';
+import ProviderDashboard  from './dashboard/ProviderDashboard';
+import AddService         from './services/AddService';
+import EditService        from './services/EditService';
+import ManageServices     from './services/ManageServices';
+import Appointments       from './appointments/Appointments';
+import ProviderAnalytics  from './analytics/ProviderAnalytics';
 
 // ── Dev Environment Auto-Login Wrapper ───────────────────────
 const DevAuthWrapper = ({ children }) => {
