@@ -1,109 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-
-// ── Mock Data ────────────────────────────────────────────────
-const stats = [
-  {
-    label: 'Total Services',
-    value: '12',
-    change: '+2 this month',
-    positive: true,
-    icon: '🛠️',
-    iconClass: 'stat-icon-blue',
-  },
-  {
-    label: "Today's Appointments",
-    value: '5',
-    change: '3 confirmed',
-    positive: true,
-    icon: '📅',
-    iconClass: 'stat-icon-green',
-  },
-  {
-    label: 'Monthly Revenue',
-    value: '$3,840',
-    change: '+18% vs last month',
-    positive: true,
-    icon: '💰',
-    iconClass: 'stat-icon-purple',
-  },
-  {
-    label: 'Avg. Rating',
-    value: '4.8',
-    change: '142 reviews',
-    positive: true,
-    icon: '⭐',
-    iconClass: 'stat-icon-orange',
-  },
-];
-
-const recentAppointments = [
-  {
-    id: 1, client: 'Sarah Mitchell', initials: 'SM', service: 'Pipe Repair',
-    date: 'Mar 28', time: '10:00 AM', status: 'confirmed', amount: '$120',
-  },
-  {
-    id: 2, client: 'James Kowalski', initials: 'JK', service: 'Bathroom Fitting',
-    date: 'Mar 28', time: '2:00 PM', status: 'pending', amount: '$250',
-  },
-  {
-    id: 3, client: 'Angela Davis', initials: 'AD', service: 'Water Heater Install',
-    date: 'Mar 29', time: '9:30 AM', status: 'confirmed', amount: '$320',
-  },
-  {
-    id: 4, client: 'Robert Kim', initials: 'RK', service: 'Drain Cleaning',
-    date: 'Mar 29', time: '3:00 PM', status: 'completed', amount: '$80',
-  },
-  {
-    id: 5, client: 'Mia Thompson', initials: 'MT', service: 'Pipe Repair',
-    date: 'Mar 30', time: '11:00 AM', status: 'pending', amount: '$120',
-  },
-];
-
-const topServices = [
-  { name: 'Pipe Repair',          bookings: 34, revenue: '$4,080' },
-  { name: 'Bathroom Fitting',     bookings: 18, revenue: '$4,500' },
-  { name: 'Water Heater Install', bookings: 12, revenue: '$3,840' },
-  { name: 'Drain Cleaning',       bookings: 28, revenue: '$2,240' },
-];
-
-const appointmentStatus = [
-  { label: 'Pending',   count: 8,  badge: 'badge-warning' },
-  { label: 'Confirmed', count: 14, badge: 'badge-info'    },
-  { label: 'Completed', count: 89, badge: 'badge-success' },
-  { label: 'Cancelled', count: 3,  badge: 'badge-danger'  },
-];
-
-const quickActions = [
-  {
-    to: '/provider/add-service',
-    icon: '➕',
-    iconBg: '#eff6ff',
-    title: 'Add Service',
-    desc: 'List a new service',
-  },
-  {
-    to: '/provider/appointments',
-    icon: '📅',
-    iconBg: '#ecfdf5',
-    title: 'View Appointments',
-    desc: '3 pending responses',
-  },
-  {
-    to: '/provider/manage-services',
-    icon: '🛠️',
-    iconBg: '#f5f3ff',
-    title: 'Manage Services',
-    desc: 'Edit your listings',
-  },
-  {
-    to: '/provider/analytics',
-    icon: '📊',
-    iconBg: '#fff7ed',
-    title: 'View Analytics',
-    desc: 'Track performance',
-  },
-];
+import dashboardApi from '../api/dashboardApi';
 
 // ── Badge helper ───────────────────────────────────────────────
 const statusBadge = (status) => {
@@ -118,16 +15,87 @@ const statusBadge = (status) => {
 
 // ── Component ──────────────────────────────────────────────────
 const ProviderDashboard = () => {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const result = await dashboardApi.getStats();
+        if (result.success) {
+          setData(result.data);
+        } else {
+          setError('Failed to fetch dashboard data.');
+        }
+      } catch (err) {
+        console.error("Dashboard error:", err);
+        setError("Error connecting to server. Please ensure you are logged in.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  if (loading) return <div>Loading dashboard...</div>;
+  if (error) return <div className="alert alert-danger" style={{padding: '1rem', background: '#fee2e2', color: '#b91c1c', borderRadius: '8px', margin: '1rem'}}>{error}</div>;
+  if (!data) return null;
+
+  // Construct stats array for UI from the API response
+  const uiStats = [
+    {
+      label: 'Total Services',
+      value: data.stats.totalServices,
+      change: 'Active listings',
+      positive: true,
+      icon: '🛠️',
+      iconClass: 'stat-icon-blue',
+    },
+    {
+      label: "Today's Appointments",
+      value: data.stats.todayAppointments,
+      change: 'Scheduled today',
+      positive: true,
+      icon: '📅',
+      iconClass: 'stat-icon-green',
+    },
+    {
+      label: 'Monthly Revenue',
+      value: `$${data.stats.monthlyRevenue}`,
+      change: `${data.stats.revenueChange}% vs last month`,
+      positive: data.stats.revenueChange >= 0,
+      icon: '💰',
+      iconClass: 'stat-icon-purple',
+    },
+    {
+      label: 'Avg. Rating',
+      value: data.stats.rating,
+      change: `${data.stats.totalReviews} reviews`,
+      positive: true,
+      icon: '⭐',
+      iconClass: 'stat-icon-orange',
+    },
+  ];
+
+  const quickActions = [
+    { to: '/provider/add-service', icon: '➕', iconBg: '#eff6ff', title: 'Add Service', desc: 'List a new service' },
+    { to: '/provider/appointments', icon: '📅', iconBg: '#ecfdf5', title: 'View Appointments', desc: `${data.statusBreakdown?.pending || 0} pending` },
+    { to: '/provider/manage-services', icon: '🛠️', iconBg: '#f5f3ff', title: 'Manage Services', desc: 'Edit your listings' },
+    { to: '/provider/analytics', icon: '📊', iconBg: '#fff7ed', title: 'View Analytics', desc: 'Track performance' },
+  ];
 
   return (
     <div>
       {/* Page Header */}
       <div className="page-header">
         <div className="page-title-group">
-          <h1>Welcome back, Alex 👋</h1>
+          <h1>Welcome back 👋</h1>
           <p>{today}</p>
         </div>
         <Link to="/provider/add-service" className="btn btn-primary">
@@ -137,7 +105,7 @@ const ProviderDashboard = () => {
 
       {/* Stats Grid */}
       <div className="stats-grid">
-        {stats.map((s) => (
+        {uiStats.map((s) => (
           <div key={s.label} className="stat-card">
             <div className={`stat-icon ${s.iconClass}`}>{s.icon}</div>
             <div className="stat-info">
@@ -172,10 +140,7 @@ const ProviderDashboard = () => {
         <div className="card">
           <div className="section-header">
             <h2>Recent Appointments</h2>
-            <Link
-              to="/provider/appointments"
-              className="btn btn-secondary btn-sm"
-            >
+            <Link to="/provider/appointments" className="btn btn-secondary btn-sm">
               View All →
             </Link>
           </div>
@@ -192,27 +157,25 @@ const ProviderDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {recentAppointments.map((appt) => (
+                {data.recentAppointments.map((appt) => (
                   <tr key={appt.id}>
                     <td>
                       <div className="appointment-row-avatar">
-                        <div className="avatar avatar-sm">{appt.initials}</div>
+                        <div className="avatar avatar-sm">{appt.client_name.charAt(0)}</div>
                         <div className="appointment-row-info">
-                          <strong>{appt.client}</strong>
+                          <strong>{appt.client_name}</strong>
                         </div>
                       </div>
                     </td>
-                    <td>{appt.service}</td>
+                    <td>{appt.service_name}</td>
                     <td>
                       <div className="appointment-row-info">
-                        <strong>{appt.date}</strong>
-                        <span>{appt.time}</span>
+                        <strong>{appt.appointment_date.substring(0, 10)}</strong>
+                        <span>{appt.appointment_time}</span>
                       </div>
                     </td>
                     <td>
-                      <strong style={{ color: 'var(--brand-blue)' }}>
-                        {appt.amount}
-                      </strong>
+                      <strong style={{ color: 'var(--brand-blue)' }}>${appt.amount}</strong>
                     </td>
                     <td>
                       <span className={statusBadge(appt.status)}>
@@ -223,23 +186,27 @@ const ProviderDashboard = () => {
                 ))}
               </tbody>
             </table>
+            {data.recentAppointments.length === 0 && (
+                <div style={{padding: '1rem', textAlign: 'center'}}>No recent appointments.</div>
+            )}
           </div>
         </div>
 
         {/* RIGHT column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
           {/* Appointment Status Summary */}
           <div className="card">
             <div className="section-header">
               <h2>Booking Status</h2>
             </div>
             <div className="status-widget">
-              {appointmentStatus.map((s) => (
-                <div key={s.label} className="status-item">
+              {Object.entries(data.statusBreakdown).map(([status, count]) => (
+                <div key={status} className="status-item">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className={`badge ${s.badge}`}>{s.label}</span>
+                    <span className={statusBadge(status)}>{status.charAt(0).toUpperCase() + status.slice(1)}</span>
                   </div>
-                  <span className="status-count">{s.count}</span>
+                  <span className="status-count">{count}</span>
                 </div>
               ))}
             </div>
@@ -249,21 +216,18 @@ const ProviderDashboard = () => {
           <div className="card">
             <div className="section-header">
               <h2>Top Services</h2>
-              <Link
-                to="/provider/manage-services"
-                style={{ fontSize: '0.78rem', color: 'var(--brand-blue)', fontWeight: 600 }}
-              >
+              <Link to="/provider/manage-services" style={{ fontSize: '0.78rem', color: 'var(--brand-blue)', fontWeight: 600 }}>
                 Manage →
               </Link>
             </div>
-            {topServices.map((s, i) => (
+            {data.topServices.map((s, i) => (
               <div key={s.name} className="top-service-item">
                 <div className="top-service-rank">#{i + 1}</div>
                 <div className="top-service-info">
                   <strong>{s.name}</strong>
-                  <span>{s.bookings} bookings</span>
+                  <span>{s.total_bookings} bookings</span>
                 </div>
-                <div className="top-service-revenue">{s.revenue}</div>
+                <div className="top-service-revenue">${s.revenue}</div>
               </div>
             ))}
           </div>
@@ -272,15 +236,10 @@ const ProviderDashboard = () => {
           <div className="card" style={{ textAlign: 'center', background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)' }}>
             <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>⭐</div>
             <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--brand-blue-dark)' }}>
-              4.8 / 5.0
-            </div>
-            <div className="stars" style={{ justifyContent: 'center', margin: '6px 0' }}>
-              {'★★★★★'.split('').map((s, i) => (
-                <span key={i}>{s}</span>
-              ))}
+              {parseFloat(data.stats.rating || 0).toFixed(1)} / 5.0
             </div>
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-              Based on <strong>142 reviews</strong>
+              Based on <strong>{data.stats.totalReviews} reviews</strong>
             </p>
           </div>
         </div>

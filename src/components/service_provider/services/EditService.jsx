@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import servicesApi from '../api/servicesApi';
 
 const categories = [
   'Home Repair', 'Plumbing', 'Electrical', 'Cleaning',
@@ -7,24 +8,88 @@ const categories = [
 ];
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-// Mock pre-filled data (in real app, fetch by id from API)
-const mockServiceData = {
-  name: 'Pipe Leak Repair',
-  category: 'Plumbing',
-  description: 'Professional pipe leak detection and repair for residential and commercial properties. We use state-of-the-art equipment to locate and fix leaks quickly.',
-  price: '120',
-  duration: '60',
-  maxBookings: '4',
-  tags: 'emergency, same-day, residential',
-  startTime: '08:00',
-  endTime: '18:00',
-};
-
 const EditService = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [selectedDays, setSelectedDays] = useState(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
-  const [form, setForm] = useState(mockServiceData);
+  
+  const [selectedDays, setSelectedDays] = useState([]);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [existingImage, setExistingImage] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
+  
+  const [loading, setLoading] = useState(false);
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      setSelectedImage(file);
+    }
+  };
+  const [initializing, setInitializing] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const [form, setForm] = useState({
+    name: '',
+    category: '',
+    description: '',
+    price: '',
+    duration: '',
+    maxBookings: '',
+    tags: '',
+    startTime: '08:00',
+    endTime: '18:00',
+  });
+
+  useEffect(() => {
+    const fetchServiceData = async () => {
+      try {
+        const res = await servicesApi.getById(id);
+        if (res.success && res.data.service) {
+          const s = res.data.service;
+          setForm({
+            name: s.name || '',
+            category: s.category || '',
+            description: s.description || '',
+            price: s.price || '',
+            duration: s.duration_minutes || '',
+            maxBookings: s.max_bookings_per_day || '',
+            tags: s.tags || '',
+            startTime: s.start_time || '08:00',
+            endTime: s.end_time || '18:00',
+          });
+          if (s.available_days) {
+            setSelectedDays(s.available_days.split(',').map(d => d.trim()).filter(Boolean));
+          }
+          if (s.image_url) {
+            setExistingImage(s.image_url);
+          }
+        } else {
+          setError('Service not found.');
+        }
+      } catch (err) {
+        console.error("Failed to load service", err);
+        setError("Could not load service data. Please try again.");
+      } finally {
+        setInitializing(false);
+      }
+    };
+
+    fetchServiceData();
+  }, [id]);
 
   const toggleDay = (day) =>
     setSelectedDays((prev) =>
@@ -34,11 +99,62 @@ const EditService = () => {
   const handleChange = (e) =>
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    alert(`Service #${id} updated successfully! (mock)`);
-    navigate('/provider/manage-services');
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedImage(file);
+    }
   };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    if (selectedDays.length === 0) {
+      setError('Please select at least one available day.');
+      return;
+    }
+
+    if (form.startTime >= form.endTime) {
+      setError('End time must be later than start time.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const formData = new FormData();
+      formData.append('name', form.name.trim());
+      formData.append('category', form.category);
+      formData.append('description', form.description.trim());
+      formData.append('price', form.price);
+      formData.append('duration_minutes', form.duration);
+      formData.append('max_bookings_per_day', form.maxBookings || '');
+      formData.append('tags', form.tags.trim());
+      formData.append('start_time', form.startTime);
+      formData.append('end_time', form.endTime);
+      formData.append('available_days', selectedDays.join(','));
+
+      if (selectedImage) {
+        formData.append('image', selectedImage);
+      }
+
+      await servicesApi.update(id, formData);
+
+      setSuccess(`Service #${id} updated successfully!`);
+      setTimeout(() => {
+        navigate('/provider/manage-services');
+      }, 1000);
+    } catch (err) {
+      setError(err.message || 'Failed to update service.');
+      console.error('Update service error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (initializing) return <div style={{padding:'2rem'}}>Loading service details...</div>;
 
   return (
     <div className="form-page-layout">
@@ -54,6 +170,18 @@ const EditService = () => {
           ← Back to Services
         </button>
       </div>
+
+      {error && (
+        <div style={{ marginBottom: '16px', padding: '12px 16px', borderRadius: '10px', background: '#ffe5e5', color: '#b42318', border: '1px solid #f5c2c7' }}>
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div style={{ marginBottom: '16px', padding: '12px 16px', borderRadius: '10px', background: '#e7f8ee', color: '#067647', border: '1px solid #b7ebc6' }}>
+          {success}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         {/* Service Details */}
@@ -73,6 +201,7 @@ const EditService = () => {
                 <label className="form-label">Category *</label>
                 <select className="form-select" name="category" value={form.category}
                   onChange={handleChange} required>
+                  <option value="">Select Category</option>
                   {categories.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
@@ -157,21 +286,68 @@ const EditService = () => {
         <div className="form-section">
           <div className="form-section-title">Service Image</div>
           <div className="form-section-sub">Update the image for this service.</div>
-          <div className="upload-area">
-            <div className="upload-area-icon">🖼️</div>
-            <h4>Click to replace image or drag & drop</h4>
-            <p>PNG, JPG or WEBP • Max 5MB</p>
+          
+          <div 
+            className="upload-area"
+            onClick={() => fileInputRef.current.click()}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            style={{
+              border: isDragging ? '2px dashed var(--brand-blue)' : '2px dashed var(--border-color)',
+              backgroundColor: isDragging ? 'var(--info-bg)' : 'transparent',
+              borderRadius: 'var(--radius-lg)',
+              padding: '40px 20px',
+              textAlign: 'center',
+              cursor: 'pointer',
+              transition: 'var(--transition)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px',
+              marginTop: '10px'
+            }}
+          >
+            {existingImage && !selectedImage && (
+              <div style={{ marginBottom: '16px' }}>
+                <img 
+                  src={`http://localhost:5000${existingImage}`} 
+                  alt="Current Service" 
+                  style={{ width: '100%', maxWidth: '300px', borderRadius: '8px', objectFit: 'cover' }}
+                />
+                <p style={{ fontSize: '13px', color: '#666', marginTop: '6px' }}>Current Image</p>
+              </div>
+            )}
+            
+            <div style={{ fontSize: '2rem' }}>{selectedImage ? '🖼️' : '☁️'}</div>
+            <h4 style={{ margin: 0, fontWeight: 600 }}>
+              {selectedImage ? 'Change Image' : existingImage ? 'Click or Drag & Drop to Replace' : 'Click or Drag & Drop to Upload'}
+            </h4>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              PNG, JPG or WEBP • Max 5MB
+            </p>
+            
+            <input 
+              ref={fileInputRef}
+              className="form-input" 
+              type="file" 
+              accept=".png,.jpg,.jpeg,.webp" 
+              onChange={handleImageChange} 
+              style={{ display: 'none' }} 
+            />
+            {selectedImage && <div style={{ fontSize: '14px', color:'var(--success)', fontWeight: 600 }}>Selected: {selectedImage.name}</div>}
           </div>
         </div>
 
         {/* Actions */}
         <div className="form-actions">
           <button type="button" className="btn btn-secondary"
-            onClick={() => navigate('/provider/manage-services')}>
+            onClick={() => navigate('/provider/manage-services')} disabled={loading}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary">
-            💾 Save Changes
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? 'Saving...' : '💾 Save Changes'}
           </button>
         </div>
       </form>

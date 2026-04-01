@@ -1,49 +1,5 @@
-import React, { useState } from 'react';
-
-const mockAppointments = [
-  {
-    id: 1, client: 'Sarah Mitchell', initials: 'SM', phone: '+1 555-201-1234',
-    service: 'Pipe Leak Repair', date: '2026-03-28', time: '10:00 AM',
-    day: 28, month: 'Mar', duration: 60, status: 'confirmed', amount: 120,
-    address: '124 Elm St, Springfield',
-  },
-  {
-    id: 2, client: 'James Kowalski', initials: 'JK', phone: '+1 555-309-5678',
-    service: 'Bathroom Fitting', date: '2026-03-28', time: '2:00 PM',
-    day: 28, month: 'Mar', duration: 120, status: 'pending', amount: 250,
-    address: '45 Oak Ave, Shelbyville',
-  },
-  {
-    id: 3, client: 'Angela Davis', initials: 'AD', phone: '+1 555-412-9012',
-    service: 'Water Heater Installation', date: '2026-03-29', time: '9:30 AM',
-    day: 29, month: 'Mar', duration: 90, status: 'confirmed', amount: 320,
-    address: '78 Maple Dr, Capital City',
-  },
-  {
-    id: 4, client: 'Robert Kim', initials: 'RK', phone: '+1 555-514-3456',
-    service: 'Drain Cleaning', date: '2026-03-29', time: '3:00 PM',
-    day: 29, month: 'Mar', duration: 45, status: 'completed', amount: 80,
-    address: '33 Pine Rd, Ogdenville',
-  },
-  {
-    id: 5, client: 'Mia Thompson', initials: 'MT', phone: '+1 555-617-7890',
-    service: 'Pipe Leak Repair', date: '2026-03-30', time: '11:00 AM',
-    day: 30, month: 'Mar', duration: 60, status: 'pending', amount: 120,
-    address: '89 Cedar Ln, North Haverbrook',
-  },
-  {
-    id: 6, client: 'David Wong', initials: 'DW', phone: '+1 555-720-2345',
-    service: 'Emergency Plumbing', date: '2026-03-31', time: '8:00 AM',
-    day: 31, month: 'Mar', duration: 90, status: 'confirmed', amount: 200,
-    address: '56 Birch Blvd, Brockway',
-  },
-  {
-    id: 7, client: 'Laura Sanchez', initials: 'LS', phone: '+1 555-823-6789',
-    service: 'Pipe Insulation', date: '2026-04-01', time: '1:00 PM',
-    day: 1, month: 'Apr', duration: 60, status: 'cancelled', amount: 95,
-    address: '12 Willow Way, Shelbyville',
-  },
-];
+import React, { useState, useEffect } from 'react';
+import appointmentsApi from '../api/appointmentsApi';
 
 const statusFilters = ['All', 'Pending', 'Confirmed', 'Completed', 'Cancelled'];
 
@@ -56,24 +12,55 @@ const badgeMap = {
 
 const Appointments = () => {
   const [activeFilter, setActiveFilter] = useState('All');
-  const [appointments, setAppointments] = useState(mockAppointments);
+  const [appointments, setAppointments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchAppointments = async () => {
+    try {
+      setLoading(true);
+      const res = await appointmentsApi.getAll();
+      if (res.success) {
+        setAppointments(res.data.appointments);
+      } else {
+        setError('Failed to fetch appointments');
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Error connecting to server.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAppointments();
+  }, []);
 
   const filtered = appointments.filter(
-    (a) => activeFilter === 'All' || a.status.toLowerCase() === activeFilter.toLowerCase()
+    (a) => activeFilter === 'All' || (a.status || '').toLowerCase() === activeFilter.toLowerCase()
   );
 
-  const updateStatus = (id, newStatus) =>
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: newStatus } : a))
-    );
+  const updateStatus = async (id, newStatus) => {
+    try {
+      await appointmentsApi.updateStatus(id, newStatus);
+      setAppointments((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, status: newStatus } : a))
+      );
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error updating status');
+    }
+  };
 
   const counts = statusFilters.reduce((acc, f) => {
     acc[f] =
       f === 'All'
         ? appointments.length
-        : appointments.filter((a) => a.status.toLowerCase() === f.toLowerCase()).length;
+        : appointments.filter((a) => (a.status || '').toLowerCase() === f.toLowerCase()).length;
     return acc;
   }, {});
+
+  if (loading) return <div style={{padding:'2rem'}}>Loading Appointments...</div>;
 
   return (
     <div>
@@ -85,12 +72,14 @@ const Appointments = () => {
         <div style={{ display: 'flex', gap: '10px' }}>
           <select className="form-select" style={{ width: 'auto' }}>
             <option>All Services</option>
-            <option>Pipe Leak Repair</option>
-            <option>Bathroom Fitting</option>
-            <option>Drain Cleaning</option>
+            {Array.from(new Set(appointments.map(a => a.service_name))).filter(Boolean).map(name => (
+              <option key={name}>{name}</option>
+            ))}
           </select>
         </div>
       </div>
+
+      {error && <div className="alert alert-danger" style={{marginBottom:'20px'}}>{error}</div>}
 
       {/* Summary stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
@@ -130,64 +119,73 @@ const Appointments = () => {
           </div>
         </div>
       ) : (
-        filtered.map((a) => (
-          <div key={a.id} className="appt-card">
-            {/* Date box */}
-            <div className="appt-date-box">
-              <span className="appt-date-day">{a.day}</span>
-              <span className="appt-date-mon">{a.month}</span>
-            </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {filtered.map((a) => {
+            const dateObj = new Date(a.appointment_date);
+            const day = dateObj.getDate();
+            const monthObj = dateObj.toLocaleString('default', { month: 'short' });
 
-            {/* Info */}
-            <div className="appt-info">
-              <div className="appt-service-name">{a.service}</div>
-              <div className="appt-client-name">
-                👤 <strong>{a.client}</strong> &nbsp;·&nbsp; 📞 {a.phone}
-              </div>
-              <div className="appt-meta">
-                <div className="appt-meta-item">🕐 {a.time}</div>
-                <div className="appt-meta-item">⏱️ {a.duration} min</div>
-                <div className="appt-meta-item">📍 {a.address}</div>
-                <div className="appt-meta-item">
-                  💰 <strong style={{ color: 'var(--brand-blue)' }}>${a.amount}</strong>
+            return (
+              <div key={a.id} className="appt-card" style={{ display: 'flex', background: 'var(--bg-card)', padding: '20px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', gap: '20px', alignItems: 'center' }}>
+                {/* Date box */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '60px', height: '60px', background: 'var(--bg-main)', borderRadius: '12px', flexShrink: 0 }}>
+                  <span style={{ fontSize: '1.5rem', fontWeight: 800, lineHeight: 1, color: 'var(--brand-blue)' }}>{day || '?'}</span>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{monthObj || ''}</span>
+                </div>
+
+                {/* Info */}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>{a.service_name}</div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                    👤 <strong>{a.client_name}</strong> &nbsp;·&nbsp; 📞 {a.client_phone || 'No phone provided'}
+                  </div>
+                  <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    <div>🕐 {a.appointment_time || 'No time set'}</div>
+                    {a.client_address && <div>📍 {a.client_address}</div>}
+                    <div>
+                      💰 <strong style={{ color: 'var(--brand-blue)' }}>${a.amount}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status + Actions */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' }}>
+                  <span className={badgeMap[a.status] || 'badge badge-muted'}>
+                    {(a.status || 'unknown').charAt(0).toUpperCase() + (a.status || 'unknown').slice(1)}
+                  </span>
+
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {a.status === 'pending' && (
+                      <>
+                        <button
+                          className="btn btn-success btn-sm"
+                          onClick={() => updateStatus(a.id, 'confirmed')}
+                        >
+                          ✅ Accept
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => updateStatus(a.id, 'cancelled')}
+                        >
+                          ✕ Decline
+                        </button>
+                      </>
+                    )}
+
+                    {a.status === 'confirmed' && (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => updateStatus(a.id, 'completed')}
+                      >
+                        ✔ Mark Done
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-
-            {/* Status + Actions */}
-            <div className="appt-actions">
-              <span className={badgeMap[a.status]}>
-                {a.status.charAt(0).toUpperCase() + a.status.slice(1)}
-              </span>
-
-              {a.status === 'pending' && (
-                <>
-                  <button
-                    className="btn btn-success btn-sm"
-                    onClick={() => updateStatus(a.id, 'confirmed')}
-                  >
-                    ✅ Accept
-                  </button>
-                  <button
-                    className="btn btn-danger btn-sm"
-                    onClick={() => updateStatus(a.id, 'cancelled')}
-                  >
-                    ✕ Decline
-                  </button>
-                </>
-              )}
-
-              {a.status === 'confirmed' && (
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => updateStatus(a.id, 'completed')}
-                >
-                  ✔ Mark Done
-                </button>
-              )}
-            </div>
-          </div>
-        ))
+            );
+          })}
+        </div>
       )}
     </div>
   );

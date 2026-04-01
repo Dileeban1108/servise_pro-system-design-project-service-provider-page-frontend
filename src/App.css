@@ -585,7 +585,7 @@
 
 /* ===================== ADD/EDIT SERVICE FORM PAGE ===================== */
 .form-page-layout {
-  max-width: 860px;
+  width: 100%;
 }
 
 .form-section {
