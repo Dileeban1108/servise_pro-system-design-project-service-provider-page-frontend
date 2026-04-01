@@ -72,7 +72,10 @@ const EditService = () => {
             endTime: s.end_time || '18:00',
           });
           if (s.available_days) {
-            setSelectedDays(s.available_days.split(',').map(d => d.trim()).filter(Boolean));
+            const daysArr = Array.isArray(s.available_days) 
+              ? s.available_days 
+              : s.available_days.split(',').map(d => d.trim()).filter(Boolean);
+            setSelectedDays(daysArr);
           }
           if (s.image_url) {
             setExistingImage(s.image_url);
@@ -160,7 +163,7 @@ const EditService = () => {
     <div className="form-page-layout">
       <div className="page-header">
         <div className="page-title-group">
-          <h1>Edit Service #{id}</h1>
+          <h1>Edit Service</h1>
           <p>Update the details of your existing service listing.</p>
         </div>
         <button
